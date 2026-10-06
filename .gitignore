@@ -1,0 +1,16 @@
+# 機密與環境設定
+.env
+.env.*
+!.env.example
+.streamlit/secrets.toml
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# 編輯器／系統
+.DS_Store
+.idea/
+.vscode/

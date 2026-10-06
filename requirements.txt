@@ -1,0 +1,16 @@
+# 股票分析 App 所需套件
+# 安裝方式：pip install -r requirements.txt
+# 版本固定為本機測試過的版本（Streamlit Cloud、GitHub Actions 才不會自動升級到新大版本）；
+# 要升級時先在本機測試，再一起更新這裡。
+
+streamlit==1.61.1
+sqlalchemy==2.0.52
+psycopg2-binary==2.9.12
+pandas==3.0.1
+plotly==6.9.0
+requests==2.32.5
+mini-racer==0.14.1        # py_mini_racer：類股熱度儀表板解析 CMoney __NUXT__ 用
+python-dotenv==1.2.3      # 讀取本機 .env 檔（DATABASE_URL）
+certifi==2026.2.25        # 主動式ETF買賣：CMoney API 憑證驗證用
+wordcloud==1.9.6          # 資金與熱度：今日討論度文字雲繪製用
+Pillow==12.1.1            # wordcloud 底層繪圖依賴

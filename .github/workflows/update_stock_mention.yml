@@ -1,0 +1,35 @@
+name: Update stock mention daily
+
+# 這個 workflow 只需要讀取 repo 程式碼，不需要寫入權限（最小權限原則）
+permissions:
+  contents: read
+
+on:
+  schedule:
+    # UTC 12:00 = 台灣時間 20:00（收盤後、CMoney熱門貼文已累積一天的討論量）
+    - cron: "0 12 * * 1-5"  # 只在台灣時間週一到週五（UTC週一~五）跑，對應交易日
+  workflow_dispatch: {}  # 允許手動觸發，方便部署後立即測試一次
+
+jobs:
+  update-stock-mention:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run update_stock_mention.py
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python update_stock_mention.py
