@@ -27,11 +27,11 @@
 **特色**：
 
 - 分析分頁涵蓋籌碼面、技術面與市場熱度。
-- 今日討論度與處置股清單由 GitHub Actions 每天台灣時間 21:00 自動更新一次。
+- 今日討論度與處置股清單每個交易日台灣時間約 21:00 自動更新一次：由外部排程服務(cron-job.org)呼叫 GitHub API，觸發 GitHub Actions workflow 執行。
 - 大表讀取採「版本鍵快取」，資料表最新日期沒變就不重查，壓低 Supabase 免費額度的 egress。
 - 私有部署：只有受邀者能開啟 App，程式碼本身可以公開。
 
-**開發上的挑戰**：CMoney 網站改版過、憑證驗證與 Python 3.13+ 不相容、Streamlit Cloud 與 GitHub Actions 都跑在 UTC 時區，以及要把 Supabase egress 控制在免費額度內。對應的做法都記錄在「[使用上要注意的事](#使用上要注意的事)」。
+**開發上的挑戰**：CMoney 網站改版過、憑證驗證與 Python 3.13+ 不相容、Streamlit Cloud 與 GitHub Actions 都跑在 UTC 時區、GitHub Actions 內建的 cron 排程不穩定(曾完全沒有觸發)而改由外部排程器觸發，以及要把 Supabase egress 控制在免費額度內。對應的做法都記錄在「[使用上要注意的事](#使用上要注意的事)」。
 
 ## 功能
 
@@ -61,7 +61,8 @@ K 線圖會標示處置股的處置期間。各分頁的判斷條件與門檻，
 | Plotly | K 線圖、Treemap、長條圖 |
 | wordcloud、Pillow | 今日討論度文字雲 |
 | py_mini_racer | 執行 CMoney 頁面內嵌的 JavaScript 來解析類股與 token 資料 |
-| GitHub Actions | 每日排程更新討論度與處置股 |
+| GitHub Actions | 執行每日更新討論度與處置股的 workflow(支援手動與 API 觸發) |
+| cron-job.org | 外部排程服務，每個交易日定時呼叫 GitHub API 觸發上述 workflow |
 
 ## 專案結構
 
@@ -76,7 +77,7 @@ packages.txt             # Streamlit Cloud 的系統套件(fonts-noto-cjk，文�
 app/
   common/                # 共用工具(資料庫連線、HTTP、圖表、格式化、CMoney 解析等)
   pages/                 # 各功能頁面，一個檔案一個功能
-.github/workflows/       # GitHub Actions 排程設定
+.github/workflows/       # GitHub Actions workflow 設定(由外部排程器觸發)
 ```
 
 ## 安裝與執行
@@ -117,12 +118,29 @@ app/
 
 ## 排程腳本(GitHub Actions)
 
-| 腳本 | Workflow | 排程(台灣時間，週一至週五) |
+| 腳本 | Workflow | 觸發時間(台灣時間，週一至週五) |
 | --- | --- | --- |
-| `update_stock_mention.py` | `update_stock_mention.yml` | 21:00 |
-| `update_disposition.py` | `update_disposition.yml` | 21:00 |
+| `update_stock_mention.py` | `update_stock_mention.yml` | 約 21:00 |
+| `update_disposition.py` | `update_disposition.yml` | 約 21:00 |
 
-兩個 workflow 都需要在 repo 的 GitHub Secrets 設定 `DATABASE_URL`，也都支援 `workflow_dispatch`(可在 Actions 頁面手動觸發)。GitHub Actions 使用 Python 3.12。本機測試：
+兩個 workflow 都需要在 repo 的 GitHub Secrets 設定 `DATABASE_URL`，也都支援 `workflow_dispatch`(可在 Actions 頁面手動觸發)。GitHub Actions 使用 Python 3.12。
+
+**為什麼用外部排程器觸發**：GitHub Actions 內建的 `schedule` 不保證準時，也可能完全不建立執行紀錄(實際遇過：手動執行正常，但排程時間到了沒有任何動作)。因此改由外部服務 [cron-job.org](https://cron-job.org) 在每個交易日定時呼叫 GitHub API，觸發 `workflow_dispatch`。workflow 若仍保留 `schedule` 區塊，只當作備援；兩個腳本都是覆蓋式寫入，同一天重複執行不會產生重複資料。
+
+**cron-job.org 的設定(每個 workflow 各建立一個 job)**：
+
+| 項目 | 設定 |
+| --- | --- |
+| URL | `https://api.github.com/repos/<帳號>/<repo名稱>/actions/workflows/<workflow檔名>/dispatches` |
+| 方法 | `POST` |
+| Request body | `{"ref":"main"}` |
+| Headers | `Accept: application/vnd.github+json`、`Authorization: Bearer <token>`、`X-GitHub-Api-Version: 2022-11-28` |
+| 排程 | Crontab `0 21 * * 1-5`，時區 `Asia/Taipei`(兩個 job 可相隔幾分鐘) |
+| 成功回應 | HTTP 204(沒有內容) |
+
+`<token>` 是 GitHub 的 fine-grained personal access token：Repository access 只選本專案，權限只開 **Actions: Read and write**。token 只存放在 cron-job.org 的 header 設定裡，**不要寫進程式碼、workflow 或 README**。token 過期後 cron-job.org 會收到 401，重新產生 token 並更新兩個 job 的 `Authorization` header 即可；建議開啟 cron-job.org 的失敗通知。
+
+本機測試：
 
 ```
 python update_stock_mention.py --dry-run          # 只印出結果，不寫入資料庫
@@ -160,7 +178,7 @@ python update_disposition.py --dry-run            # 只印出抓到的處置股
 
 **其他**
 
-- 公開 repo 若連續 60 天沒有任何活動，GitHub 會自動停用排程 workflow。文字雲或處置股突然不再更新時，先到 Actions 頁面檢查。
+- 文字雲或處置股突然不再更新時，依序檢查：cron-job.org 的執行紀錄(回應是否為 204；401 通常是 token 過期，403 是 token 權限不足)、GitHub Actions 頁面是否有 `workflow_dispatch` 觸發的執行紀錄、該次執行的 log。公開 repo 若連續 60 天沒有任何活動，GitHub 會自動停用 `schedule` 排程(外部以 `workflow_dispatch` 觸發不受影響)。
 - Streamlit Cloud 與 GitHub Actions 的伺服器都在海外，證交所、櫃買、集保、CMoney 是否會擋或限流，需部署後實測。
 
 ## 資料來源與免責聲明
