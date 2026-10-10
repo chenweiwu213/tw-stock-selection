@@ -31,6 +31,7 @@ from app.pages.ma_convergence import render_ma_knot_tab
 from app.pages.ma_convergence_volume import render_ma_knot_volume_spike_tab
 from app.pages.ma_stable import render_ma_signal_tab
 from app.pages.margin_signal import render_margin_tab
+from app.pages.pnl_calculator import render_pnl_calculator_tab
 from app.pages.sector_heatmap import render_sector_heat_tab
 from app.pages.shareholding import render_big_holder_ratio_tab
 
@@ -147,7 +148,7 @@ st.markdown(
 
 PAGE_OPTIONS = [
     "融資融券", "三大法人", "站穩均線", "均線糾結", "均線糾結爆大量",
-    "下跌但法人同步買進", "主動式ETF買賣", "資金與熱度", "大戶持股比例", "資料庫維護",
+    "下跌但法人同步買進", "主動式ETF買賣", "資金與熱度", "大戶持股比例", "損益計算", "資料庫維護",
 ]
 
 selected_page = st.sidebar.radio("功能選單", PAGE_OPTIONS, key="selected_page")
@@ -181,5 +182,7 @@ with page_container.container():
         render_sector_heat_tab()
     elif selected_page == "大戶持股比例":
         render_big_holder_ratio_tab()
+    elif selected_page == "損益計算":
+        render_pnl_calculator_tab()
     elif selected_page == "資料庫維護":
         render_db_maintenance_tab()

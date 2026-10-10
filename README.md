@@ -12,8 +12,8 @@
 - [專案結構](#專案結構)
 - [安裝與執行](#安裝與執行)
 - [使用方式](#使用方式)
-- [部署（Streamlit Cloud）](#部署streamlit-cloud)
-- [排程腳本（GitHub Actions）](#排程腳本github-actions)
+- [部署(Streamlit Cloud)](#部署streamlit-cloud)
+- [排程腳本(GitHub Actions)](#排程腳本github-actions)
 - [使用上要注意的事](#使用上要注意的事)
 - [資料來源與免責聲明](#資料來源與免責聲明)
 - [授權](#授權)
@@ -27,7 +27,7 @@
 **特色**：
 
 - 分析分頁涵蓋籌碼面、技術面與市場熱度。
-- 今日討論度與處置股清單由 GitHub Actions 每天自動更新。
+- 今日討論度與處置股清單由 GitHub Actions 每天台灣時間 21:00 自動更新一次。
 - 大表讀取採「版本鍵快取」，資料表最新日期沒變就不重查，壓低 Supabase 免費額度的 egress。
 - 私有部署：只有受邀者能開啟 App，程式碼本身可以公開。
 
@@ -46,6 +46,7 @@
 | 主動式ETF買賣 | 主動式 ETF 的持股變化與四個跨 ETF 分析 | `etf_master`、`etf_holdings_daily` |
 | 資金與熱度 | 類股熱度 Treemap、漲跌家數分佈、今日討論度文字雲 | `sector_category_master`、`stock_price_daily`、`stock_mention_daily` |
 | 大戶持股比例 | 集保戶股權分散表的週變化 | `shareholding_distribution_weekly` |
+| 損益計算 | 輸入買賣價、手續費折扣、張數，計算手續費、證交稅與淨損益，並顯示最低不賠賣出價(支援當沖、ETF 稅率) | 無(純計算) |
 | 資料庫維護 | 各資料表保留最近 N 筆的刪除功能、手動更新處置股 | 全部 |
 
 K 線圖會標示處置股的處置期間。各分頁的判斷條件與門檻，請看 `app/pages/` 下對應檔案裡的 `compute_*` 函式。
@@ -69,24 +70,24 @@ analysis_app.py          # 入口：page config、CSS、側邊欄選單、頁面
 schema.sql               # 所有資料表 DDL，只在 Supabase SQL Editor 手動執行一次
 update_stock_mention.py  # 排程腳本：抓取 CMoney 討論度，寫入 stock_mention_daily
 update_disposition.py    # 排程腳本：抓取上市／上櫃處置股清單，寫入 disposition_stocks
-requirements.txt         # Python 套件（Streamlit Cloud 與 GitHub Actions 都會讀取）
-packages.txt             # Streamlit Cloud 的系統套件（fonts-noto-cjk，文字雲中文字型用）
+requirements.txt         # Python 套件(Streamlit Cloud 與 GitHub Actions 都會讀取)
+packages.txt             # Streamlit Cloud 的系統套件(fonts-noto-cjk，文字雲中文字型用)
 .env.example             # 本機環境變數範本
 app/
-  common/                # 共用工具（資料庫連線、HTTP、圖表、格式化、CMoney 解析等）
+  common/                # 共用工具(資料庫連線、HTTP、圖表、格式化、CMoney 解析等)
   pages/                 # 各功能頁面，一個檔案一個功能
 .github/workflows/       # GitHub Actions 排程設定
 ```
 
 ## 安裝與執行
 
-需要 Python 3.13 以上（本機開發）與一個 Supabase 專案。
+需要 Python 3.13 以上(本機開發)與一個 Supabase 專案。
 
 1. 取得程式碼：`git clone <你的儲存庫網址>`，進入專案資料夾。
-2. 在 Supabase 取得 **Session Pooler** 連線字串（本機網路不支援 IPv6 直連時必須用這個）。
+2. 在 Supabase 取得 **Session Pooler** 連線字串(本機網路不支援 IPv6 直連時必須用這個)。
 3. 複製 `.env.example` 為 `.env`，填入 `DATABASE_URL`。
 4. 到 Supabase SQL Editor 執行 `schema.sql` 建立所有資料表。
-5. 安裝套件：`pip install -r requirements.txt`（建議先建立虛擬環境）。
+5. 安裝套件：`pip install -r requirements.txt`(建議先建立虛擬環境)。
 6. 啟動：`streamlit run analysis_app.py`。
 
 部署到 Streamlit Cloud 時，改在 App 的 Secrets 設定 `DATABASE_URL`，不需要 `.env`。
@@ -95,7 +96,7 @@ app/
 
 1. 點左上角的選單按鈕展開側邊欄，選擇要看的分頁。
 2. **第一次使用資料表是空的，需要先匯入資料**：
-   - 融資融券、三大法人、站穩均線：分頁內的下載按鈕會從證交所、櫃買中心抓資料寫入資料庫（有每日下載次數限制）。
+   - 融資融券、三大法人、站穩均線：分頁內的下載按鈕會從證交所、櫃買中心抓資料寫入資料庫(有每日下載次數限制)。
    - 大戶持股比例：上傳集保公開的戶股權分散表 CSV。
    - 主動式ETF買賣：按「抓取今日持股」。
    - 資金與熱度：重新抓取類股對照表；今日討論度與處置股由排程更新，也可手動觸發。
@@ -107,21 +108,21 @@ app/
 
 ![主動式ETF買賣：跨 ETF 訊號](docs/images/active_etf.png)
 
-## 部署（Streamlit Cloud）
+## 部署(Streamlit Cloud)
 
-1. 在 App Settings → Secrets 設定 `DATABASE_URL`（Session Pooler 連線字串）。
+1. 在 App Settings → Secrets 設定 `DATABASE_URL`(Session Pooler 連線字串)。
 2. 在 Advanced settings 選擇 Python 版本。
-3. repo 根目錄的 `packages.txt`（內容為 `fonts-noto-cjk`）會用 apt 安裝；沒有它的話，文字雲會退回只顯示股票代號，不會報錯。
+3. repo 根目錄的 `packages.txt`(內容為 `fonts-noto-cjk`)會用 apt 安裝；沒有它的話，文字雲會退回只顯示股票代號，不會報錯。
 4. 私有 App：Sharing 設定選 Only specific people can view this app，並邀請要使用的人。
 
-## 排程腳本（GitHub Actions）
+## 排程腳本(GitHub Actions)
 
-| 腳本 | Workflow | 排程（台灣時間，週一至週五） |
+| 腳本 | Workflow | 排程(台灣時間，週一至週五) |
 | --- | --- | --- |
-| `update_stock_mention.py` | `update_stock_mention.yml` | 20:00 |
-| `update_disposition.py` | `update_disposition.yml` | 21:00、09:00 |
+| `update_stock_mention.py` | `update_stock_mention.yml` | 21:00 |
+| `update_disposition.py` | `update_disposition.yml` | 21:00 |
 
-兩個 workflow 都需要在 repo 的 GitHub Secrets 設定 `DATABASE_URL`，也都支援 `workflow_dispatch`（可在 Actions 頁面手動觸發）。GitHub Actions 使用 Python 3.12。本機測試：
+兩個 workflow 都需要在 repo 的 GitHub Secrets 設定 `DATABASE_URL`，也都支援 `workflow_dispatch`(可在 Actions 頁面手動觸發)。GitHub Actions 使用 Python 3.12。本機測試：
 
 ```
 python update_stock_mention.py --dry-run          # 只印出結果，不寫入資料庫
@@ -141,14 +142,14 @@ python update_disposition.py --dry-run            # 只印出抓到的處置股
 
 **快取與資料更新**
 
-- 大表讀取（股價、三大法人、融資融券）用「版本鍵快取」：呼叫前先查資料表最新日期，日期沒變就沿用快取，所以排程或匯入寫入新資料後會自動生效，不需要重啟 App。其餘頁面（大戶持股、主動式ETF、處置股等）是 5 分鐘的短快取。
+- 大表讀取(股價、三大法人、融資融券)用「版本鍵快取」：呼叫前先查資料表最新日期，日期沒變就沿用快取，所以排程或匯入寫入新資料後會自動生效，不需要重啟 App。其餘頁面(大戶持股、主動式ETF、處置股等)是 5 分鐘的短快取。
 - Streamlit Cloud 與 GitHub Actions 都跑在 UTC。程式裡所有「今天」的判斷一律用 `app/common/constants.py` 的 `today_tw()`，不能用 `datetime.date.today()`。
 
 **CMoney 相關**
 
 - CMoney 憑證缺 Subject Key Identifier，會被 Python 3.13+ 擋下，所以所有對 cmoney.tw 的請求都必須用 `app/common/http.py` 的 `get_relaxed_session()`。
 - 類股分類與討論度都是解析頁面內嵌的 `window.__NUXT__` 資料，改用 `deepFind()` 依鍵名搜尋而不是寫死路徑，因為 CMoney 改版過。若類股抓取突然失敗，先懷疑是網站再次改版。
-- 討論度 API 與主動式 ETF 持股 API 都需要 CMoney 訪客 Bearer token（約 25 小時過期），由 `app/common/cmoney.py` 的 `fetch_bearer_token()` 每次重新取得，不可存進資料庫。這些 API 沒有官方文件，格式隨時可能變動，某個功能突然失效時請先檢查 API 回應。
+- 討論度 API 與主動式 ETF 持股 API 都需要 CMoney 訪客 Bearer token(約 25 小時過期)，由 `app/common/cmoney.py` 的 `fetch_bearer_token()` 每次重新取得，不可存進資料庫。這些 API 沒有官方文件，格式隨時可能變動，某個功能突然失效時先檢查 API 回應。
 - **今日討論度的涵蓋範圍是刻意的設計**：資料來自「熱門」feed，每天約 80～90 篇，不是全部貼文，冷門股可能完全不會出現。資料庫只保留當天統計，所以文字雲沒有日期篩選。
 
 **資金與熱度的數值**
@@ -164,7 +165,7 @@ python update_disposition.py --dry-run            # 只印出抓到的處置股
 
 ## 資料來源與免責聲明
 
-資料來源：台灣證券交易所（TWSE）、證券櫃檯買賣中心（TPEx）、集中保管結算所（TDCC）、CMoney。資料著作權屬原提供單位。
+資料來源：台灣證券交易所(TWSE)、證券櫃檯買賣中心(TPEx)、集中保管結算所(TDCC)、CMoney。資料著作權屬原提供單位。
 
 本專案僅供個人研究與學習，所有訊號與分析結果不構成任何投資建議，使用者需自行承擔投資風險。
 
