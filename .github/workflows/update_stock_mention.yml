@@ -5,11 +5,11 @@ permissions:
   contents: read
 
 on:
-  schedule:
-    # UTC 13:17 = 台灣時間 21:17(收盤後、CMoney熱門貼文已累積一天的討論量)
-    # 分鐘刻意錯開整點(GitHub 整點排程最擁擠，容易延遲或被略過)；一天只執行一次
-    - cron: "17 13 * * 1-5"  # 只在台灣時間週一到週五(UTC週一~五)跑，對應交易日
-  workflow_dispatch: {}  # 允許手動觸發，方便部署後立即測試一次
+  # 不使用 GitHub 內建的 schedule(不保證準時，也可能完全不觸發)。
+  # 改由 cron-job.org 在台灣時間週一到週五約 21:00(收盤後、CMoney熱門貼文已累積一天的討論量)
+  # 呼叫 GitHub API 觸發 workflow_dispatch，詳見 README「排程腳本」。
+  # 也可在 Actions 頁面手動觸發。
+  workflow_dispatch: {}
 
 jobs:
   update-stock-mention:

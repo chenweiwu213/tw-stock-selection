@@ -49,7 +49,7 @@
 | 損益計算 | 輸入買賣價、手續費折扣、張數，計算手續費、證交稅與淨損益，並顯示最低不賠賣出價(支援當沖、ETF 稅率) | 無(純計算) |
 | 資料庫維護 | 各資料表保留最近 N 筆的刪除功能、手動更新處置股 | 全部 |
 
-K 線圖會標示處置股的處置期間。各分頁的判斷條件與門檻，請看 `app/pages/` 下對應檔案裡的 `compute_*` 函式。
+K 線圖會標示處置股的處置期間。各分頁的判斷條件與門檻，放在 `app/pages/` 下對應檔案裡的 `compute_*` 函式。
 
 ## 技術棧
 
@@ -125,7 +125,7 @@ app/
 
 兩個 workflow 都需要在 repo 的 GitHub Secrets 設定 `DATABASE_URL`，也都支援 `workflow_dispatch`(可在 Actions 頁面手動觸發)。GitHub Actions 使用 Python 3.12。
 
-**為什麼用外部排程器觸發**：GitHub Actions 內建的 `schedule` 不保證準時，也可能完全不建立執行紀錄(實際遇過：手動執行正常，但排程時間到了沒有任何動作)。因此改由外部服務 [cron-job.org](https://cron-job.org) 在每個交易日定時呼叫 GitHub API，觸發 `workflow_dispatch`。workflow 若仍保留 `schedule` 區塊，只當作備援；兩個腳本都是覆蓋式寫入，同一天重複執行不會產生重複資料。
+**為什麼用外部排程器觸發**：GitHub Actions 內建的 `schedule` 不保證準時，也可能完全不建立執行紀錄(實際遇過：手動執行正常，但排程時間到了沒有任何動作)。因此改由外部服務 [cron-job.org](https://cron-job.org) 在每個交易日定時呼叫 GitHub API，觸發 `workflow_dispatch`。兩個 workflow 已移除 `schedule` 區塊，只保留 `workflow_dispatch`，避免與外部排程重複執行。
 
 **cron-job.org 的設定(每個 workflow 各建立一個 job)**：
 
@@ -178,14 +178,14 @@ python update_disposition.py --dry-run            # 只印出抓到的處置股
 
 **其他**
 
-- 文字雲或處置股突然不再更新時，依序檢查：cron-job.org 的執行紀錄(回應是否為 204；401 通常是 token 過期，403 是 token 權限不足)、GitHub Actions 頁面是否有 `workflow_dispatch` 觸發的執行紀錄、該次執行的 log。公開 repo 若連續 60 天沒有任何活動，GitHub 會自動停用 `schedule` 排程(外部以 `workflow_dispatch` 觸發不受影響)。
+- 文字雲或處置股突然不再更新時，依序檢查：cron-job.org 的執行紀錄(回應是否為 204；401 通常是 token 過期，403 是 token 權限不足)、GitHub Actions 頁面是否有 `workflow_dispatch` 觸發的執行紀錄、該次執行的 log。
 - Streamlit Cloud 與 GitHub Actions 的伺服器都在海外，證交所、櫃買、集保、CMoney 是否會擋或限流，需部署後實測。
 
 ## 資料來源與免責聲明
 
 資料來源：台灣證券交易所(TWSE)、證券櫃檯買賣中心(TPEx)、集中保管結算所(TDCC)、CMoney。資料著作權屬原提供單位。
 
-本專案僅供個人研究與學習，所有訊號與分析結果不構成任何投資建議，使用者需自行承擔投資風險。
+本專案僅供個人研究與學習，所有分析結果不構成任何投資建議，使用者需自行承擔投資風險。
 
 ## 授權
 
