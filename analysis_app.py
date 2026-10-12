@@ -147,7 +147,7 @@ st.markdown(
 )
 
 PAGE_OPTIONS = [
-    "融資融券", "三大法人", "站穩均線", "均線糾結", "均線糾結爆大量",
+    "站穩均線", "三大法人", "融資融券", "均線糾結", "均線糾結爆大量",
     "下跌但法人同步買進", "主動式ETF買賣", "資金與熱度", "大戶持股比例", "損益計算", "資料庫維護",
 ]
 
@@ -164,12 +164,12 @@ selected_page = st.sidebar.radio("功能選單", PAGE_OPTIONS, key="selected_pag
 # 不會像st.tabs()一樣每次rerun都把每個分頁的邏輯全部跑一遍。
 page_container = st.empty()
 with page_container.container():
-    if selected_page == "融資融券":
-        render_margin_tab()
+    if selected_page == "站穩均線":
+        render_ma_signal_tab()
     elif selected_page == "三大法人":
         render_t86_tab()
-    elif selected_page == "站穩均線":
-        render_ma_signal_tab()
+    elif selected_page == "融資融券":
+        render_margin_tab()
     elif selected_page == "均線糾結":
         render_ma_knot_tab()
     elif selected_page == "均線糾結爆大量":

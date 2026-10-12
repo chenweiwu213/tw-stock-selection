@@ -12,7 +12,9 @@ import streamlit as st
 from sqlalchemy import text
 
 from app.common.db import get_engine
-from app.common.disposition import fetch_disposition_twse, fetch_disposition_tpex, load_disposition_map, upsert_disposition
+# 處置股手動更新功能目前已停用(見 render_db_maintenance_tab 內的註解)，
+# 若需要重新啟用，請一併取消下一行的註解
+# from app.common.disposition import fetch_disposition_twse, fetch_disposition_tpex, load_disposition_map, upsert_disposition
 
 DB_MAINTENANCE_TABLES = [
     {
@@ -172,33 +174,40 @@ def render_db_maintenance_section(cfg: dict):
     st.divider()
 
 
-# ----處置股資料更新--------
 def render_db_maintenance_tab():
     st.header("資料庫維護")
 
-    st.subheader(
-        "處置股清單手動更新",
-    )
-    if st.button("立即更新處置股清單(上市＋上櫃)", key="disposition_manual_update_btn"):
-        total = 0
-        with st.spinner("下載上市處置股清單中..."):
-            try:
-                twse_df = fetch_disposition_twse()
-                total += upsert_disposition(twse_df)
-                st.write(f"上市(TWSE)：抓到 {len(twse_df)} 筆")
-            except Exception as e:
-                st.error(f"上市(TWSE)抓取失敗：{e}")
-        with st.spinner("下載上櫃處置股清單中..."):
-            try:
-                tpex_df = fetch_disposition_tpex()
-                total += upsert_disposition(tpex_df)
-                st.write(f"上櫃(TPEx)：抓到 {len(tpex_df)} 筆")
-            except Exception as e:
-                st.error(f"上櫃(TPEx)抓取失敗：{e}")
-        load_disposition_map.clear()
-        st.success(f"完成，共新增/更新 {total} 筆處置股紀錄。")
-
-    st.divider()
+    # ---- 處置股清單手動更新(已停用) ----
+    # 處置股清單目前由排程(cron-job.org 觸發 GitHub Actions 的 update_disposition.py)
+    # 每個交易日自動更新，不需要提供使用者手動更新。
+    # 以下這段程式碼僅供「排程出問題時的緊急使用」：
+    # 若排程連續失敗、又需要立刻補上最新處置股，可取消下方整段註解(同時取消檔案開頭
+    # 對 app.common.disposition 的 import 註解)，重新部署後即可在此頁手動更新。
+    # 問題排除、排程恢復正常後，建議再把這段註解回去。
+    #
+    # st.subheader(
+    #     "處置股清單手動更新",
+    # )
+    # if st.button("立即更新處置股清單(上市＋上櫃)", key="disposition_manual_update_btn"):
+    #     total = 0
+    #     with st.spinner("下載上市處置股清單中..."):
+    #         try:
+    #             twse_df = fetch_disposition_twse()
+    #             total += upsert_disposition(twse_df)
+    #             st.write(f"上市(TWSE)：抓到 {len(twse_df)} 筆")
+    #         except Exception as e:
+    #             st.error(f"上市(TWSE)抓取失敗：{e}")
+    #     with st.spinner("下載上櫃處置股清單中..."):
+    #         try:
+    #             tpex_df = fetch_disposition_tpex()
+    #             total += upsert_disposition(tpex_df)
+    #             st.write(f"上櫃(TPEx)：抓到 {len(tpex_df)} 筆")
+    #         except Exception as e:
+    #             st.error(f"上櫃(TPEx)抓取失敗：{e}")
+    #     load_disposition_map.clear()
+    #     st.success(f"完成，共新增/更新 {total} 筆處置股紀錄。")
+    #
+    # st.divider()
 
     for cfg in DB_MAINTENANCE_TABLES:
         render_db_maintenance_section(cfg)
