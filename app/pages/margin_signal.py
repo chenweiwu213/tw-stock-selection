@@ -359,7 +359,7 @@ def render_margin_tab():
                     except ValueError as e:
                         st.warning(str(e))
                     except Exception as e:
-                        st.error(f"下載或匯入失敗：{e}(可改用本機 import_otc_to_supabase.py 手動匯入)")
+                        st.error(f"下載或匯入失敗：{e}")
 
     st.divider()
 

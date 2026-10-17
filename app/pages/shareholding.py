@@ -1,9 +1,9 @@
 """
-大戶持股比例功能。
+持股比例功能(大戶持股比例、韭菜持股比例)。
 
 資料來源：集保戶股權分散表(臺灣集中保管結算所，data.gov.tw 資料集 11452)
 原始欄位固定為：資料日期、證券代號、持股分級、人數、股數、占集保庫存數比例%
-持股分級 1~15 為實際級距(15 = 100萬股以上，即「大戶」的最高級距)，
+持股分級 1~15 為實際級距(15 = 100萬股以上，即「大戶」的最高級距；1~3 級為每人持股1萬股以下，本功能稱「韭菜」)，
 16 是極小的補充級距(實務上通常為0或接近0)，17 是「合計」列(=100%，
 不可與其他級距一起加總，否則會重複計算)，因此匯入時一律排除 17。
 
@@ -132,7 +132,7 @@ def load_shareholding_dates() -> list:
 
 def load_stock_name_map() -> pd.DataFrame:
     """shareholding表本身沒有股票名稱欄位，借用 stock_price_daily 現有的證券代號/股票名稱對照做顯示用，
-    對照不到的股票名稱留空即可，不影響大戶比例計算本身。"""
+    對照不到的股票名稱留空即可，不影響計算本身。"""
     try:
         return pd.read_sql(
             """
@@ -146,25 +146,23 @@ def load_stock_name_map() -> pd.DataFrame:
         return pd.DataFrame(columns=["stock_id", "stock_name"])
 
 
-def calc_big_holder_ratio(df: pd.DataFrame, level_min: int, level_max: int) -> pd.DataFrame:
-    """加總 [level_min, level_max] 級距的『占集保庫存數比例%』，得到每檔股票的『大戶持股比例%』。"""
+def calc_holder_ratio(df: pd.DataFrame, level_min: int, level_max: int, ratio_label: str) -> pd.DataFrame:
+    """加總 [level_min, level_max] 級距的『占集保庫存數比例%』，得到每檔股票在該級距群組的持股比例%。"""
     cond = df["holding_level"].between(level_min, level_max) & df["pct_of_custody"].notna()
     g = (
         df.loc[cond]
         .groupby("stock_id", as_index=False)["pct_of_custody"]
         .sum()
-        .rename(columns={"pct_of_custody": "大戶持股比例%"})
+        .rename(columns={"pct_of_custody": ratio_label})
     )
-    g["大戶持股比例%"] = g["大戶持股比例%"].round(3)
+    g[ratio_label] = g[ratio_label].round(3)
     return g
 
 
-def compute_big_holder_change(
-    old_date, new_date, level_min: int, level_max: int,
-    change_min_pct: float, change_max_pct: float,
-) -> pd.DataFrame:
-    """比較兩週的大戶持股比例%變化，篩出變動幅度落在 [change_min_pct, change_max_pct) 的股票。"""
-    raw = pd.read_sql(
+@st.cache_data(ttl=300)
+def load_shareholding_two_weeks(old_date, new_date) -> pd.DataFrame:
+    """撈出兩個週別的全市場級距資料，大戶與韭菜兩個查詢共用同一份，避免重複讀取。"""
+    return pd.read_sql(
         """
         SELECT trade_date, stock_id, holding_level, pct_of_custody
         FROM shareholding_distribution_weekly
@@ -172,16 +170,23 @@ def compute_big_holder_change(
         """,
         get_engine(), params={"old_date": old_date, "new_date": new_date},
     )
+
+
+def compute_holder_change(
+    raw: pd.DataFrame, name_map: pd.DataFrame, old_date, new_date, level_min: int, level_max: int,
+    change_min_pct: float, change_max_pct: float, ratio_label: str,
+) -> pd.DataFrame:
+    """比較兩週指定級距群組的持股比例%變化，篩出變動幅度落在 [change_min_pct, change_max_pct) 的股票。"""
     if raw.empty:
-        return pd.DataFrame()
+        return pd.DataFrame(columns=["股票代號", "股票名稱", "變動方向"])
 
-    old_ratio = calc_big_holder_ratio(raw[raw["trade_date"] == old_date], level_min, level_max)
-    new_ratio = calc_big_holder_ratio(raw[raw["trade_date"] == new_date], level_min, level_max)
+    old_ratio = calc_holder_ratio(raw[raw["trade_date"] == old_date], level_min, level_max, ratio_label)
+    new_ratio = calc_holder_ratio(raw[raw["trade_date"] == new_date], level_min, level_max, ratio_label)
 
-    old_col = f"大戶持股比例%({old_date})"
-    new_col = f"大戶持股比例%({new_date})"
-    old_ratio = old_ratio.rename(columns={"大戶持股比例%": old_col})
-    new_ratio = new_ratio.rename(columns={"大戶持股比例%": new_col})
+    old_col = f"{ratio_label}({old_date})"
+    new_col = f"{ratio_label}({new_date})"
+    old_ratio = old_ratio.rename(columns={ratio_label: old_col})
+    new_ratio = new_ratio.rename(columns={ratio_label: new_col})
 
     merged = old_ratio.merge(new_ratio, on="stock_id", how="outer")
     merged[old_col] = merged[old_col].fillna(0.0)
@@ -196,7 +201,6 @@ def compute_big_holder_change(
         (merged["變動幅度(絕對值)%"] < change_max_pct)
     ].copy()
 
-    name_map = load_stock_name_map()
     result = result.merge(name_map, on="stock_id", how="left")
     result = result.rename(columns={"stock_id": "股票代號", "stock_name": "股票名稱"})
 
@@ -206,33 +210,59 @@ def compute_big_holder_change(
     return result.reset_index(drop=True)
 
 
-def load_shareholding_ratio_trend(stock_id: str, level_min: int, level_max: int) -> pd.DataFrame:
-    """撈出單一股票歷史每週的大戶持股比例%，供趨勢圖使用。"""
-    raw = pd.read_sql(
-        """
-        SELECT trade_date, holding_level, pct_of_custody
-        FROM shareholding_distribution_weekly
-        WHERE stock_id = %(stock_id)s AND holding_level BETWEEN %(level_min)s AND %(level_max)s
-        ORDER BY trade_date
-        """,
-        get_engine(), params={"stock_id": stock_id, "level_min": level_min, "level_max": level_max},
-    )
-    if raw.empty:
-        return raw
-    g = (
-        raw.groupby("trade_date", as_index=False)["pct_of_custody"]
-        .sum()
-        .rename(columns={"pct_of_custody": "大戶持股比例%"})
-    )
-    g["大戶持股比例%"] = g["大戶持股比例%"].round(3)
-    return g
-
-
 # ----頁面畫面----
 
-def render_big_holder_ratio_tab():
+def _render_holder_query(
+    key_prefix: str, group_name: str, default_level_min: int, default_level_max: int,
+    raw: pd.DataFrame, name_map: pd.DataFrame, old_date, new_date,
+) -> pd.DataFrame:
+    """畫出單一級距群組(大戶或韭菜)的篩選條件與結果表，回傳篩選後的結果。"""
+    c3, c4, c5 = st.columns(3)
+    with c3:
+        level_min = st.number_input(
+            f"{group_name}分級門檻下限", min_value=1, max_value=15, value=default_level_min,
+            key=f"{key_prefix}_level_min",
+        )
+    with c4:
+        level_max = st.number_input(
+            f"{group_name}分級門檻上限", min_value=int(level_min), max_value=15, value=default_level_max,
+            key=f"{key_prefix}_level_max",
+        )
+    with c5:
+        direction = st.selectbox("變動方向", ["全部", "只看增加", "只看減少"], key=f"{key_prefix}_direction")
+
+    c6, c7 = st.columns(2)
+    with c6:
+        change_min = st.number_input(
+            "變動幅度下限%(絕對值，含)", min_value=0.0, value=6.0, step=0.5, key=f"{key_prefix}_change_min",
+        )
+    with c7:
+        change_max = st.number_input(
+            "變動幅度上限%(絕對值，不含)", min_value=float(change_min), value=15.0, step=0.5,
+            key=f"{key_prefix}_change_max",
+        )
+
+    result = compute_holder_change(
+        raw, name_map, old_date, new_date, int(level_min), int(level_max),
+        float(change_min), float(change_max), f"{group_name}持股比例%",
+    )
+
+    if direction == "只看增加":
+        result = result[result["變動方向"] == "增加"]
+    elif direction == "只看減少":
+        result = result[result["變動方向"] == "減少"]
+
+    st.write(f"{old_date} → {new_date}，符合條件的股票共 {len(result)} 檔")
+    st.dataframe(
+        style_rows_by_sign(result, "變動(新-舊)%"), use_container_width=True, hide_index=True,
+        key=f"{key_prefix}_result_table",
+    )
+    return result
+
+
+def render_shareholding_tab():
     apply_help_tooltip_top_right()
-    st.header("大戶持股比例")
+    st.header("持股比例")
 
     # ----區塊一：匯入資料----
     st.subheader("匯入資料")
@@ -283,9 +313,9 @@ def render_big_holder_ratio_tab():
             if total_rows:
                 st.success(f"匯入完成，共 {total_rows} 筆，涵蓋交易週：{', '.join(sorted(set(imported_dates)))}")
 
-    # ----區塊二：大戶持股比例變動查詢----
+    # ----區塊二：比較週別(大戶持股比例、韭菜持股比例共用)----
     st.divider()
-    st.subheader("大戶持股比例變動查詢")
+    st.subheader("比較週別")
 
     available_dates = load_shareholding_dates()  # 新到舊排序
     if len(available_dates) < 2:
@@ -313,58 +343,46 @@ def render_big_holder_ratio_tab():
             st.session_state["shd_old_date"] = old_options[0]
         old_date = st.selectbox("舊週別", old_options, key="shd_old_date")
 
-    c3, c4, c5 = st.columns(3)
-    with c3:
-        level_min = st.number_input(
-            "大戶分級門檻下限", min_value=1, max_value=15, value=10, key="shd_level_min",
-        )
-    with c4:
-        level_max = st.number_input(
-            "大戶分級門檻上限", min_value=int(level_min), max_value=15, value=15, key="shd_level_max",
-        )
-    with c5:
-        direction = st.selectbox("變動方向", ["全部", "只看增加", "只看減少"], key="shd_direction")
+    raw = load_shareholding_two_weeks(old_date, new_date)
+    name_map = load_stock_name_map()
 
-    c6, c7 = st.columns(2)
-    with c6:
-        change_min = st.number_input(
-            "變動幅度下限%(絕對值，含)", min_value=0.0, value=6.0, step=0.5, key="shd_change_min",
-        )
-    with c7:
-        change_max = st.number_input(
-            "變動幅度上限%(絕對值，不含)", min_value=float(change_min), value=15.0, step=0.5, key="shd_change_max",
-        )
-
-    result = compute_big_holder_change(
-        old_date, new_date, int(level_min), int(level_max), float(change_min), float(change_max),
+    # ----區塊三：持股比例----
+    st.divider()
+    st.subheader(
+        "大戶持股比例",
+        help=(
+            "大戶 = 預設持股分級 10~15 級的大額持股(每人持股 100 張以上)"
+        ),
     )
+    big_result = _render_holder_query("shd", "大戶", 10, 15, raw, name_map, old_date, new_date)
 
-    if direction == "只看增加":
-        result = result[result["變動方向"] == "增加"]
-    elif direction == "只看減少":
-        result = result[result["變動方向"] == "減少"]
-
-    st.write(f"{old_date} → {new_date}，符合條件的股票共 {len(result)} 檔")
-    st.dataframe(
-        style_rows_by_sign(result, "變動(新-舊)%"), use_container_width=True, hide_index=True, key="shd_result_table",
+    # ----區塊四：韭菜比例----
+    st.divider()
+    st.subheader(
+        "韭菜持股比例",
+        help=(
+            "韭菜 = 預設持股分級 1~3 級的小額持股(每人持股 10 張以下)"
+        ),
     )
+    leek_result = _render_holder_query("shd_leek", "韭菜", 1, 3, raw, name_map, old_date, new_date)
 
-    csv = result.to_csv(index=False).encode("utf-8-sig")
-    st.download_button(
-        "下載結果 CSV", csv, file_name="大戶持股比例變動.csv", mime="text/csv", key="shd_dl_result",
-    )
-
-    # ----區塊三：K線圖----
+    # ----區塊五：K線圖(大戶持股比例與韭菜持股比例的結果合併)----
     st.divider()
     st.subheader("K線圖")
 
-    if result.empty:
+    combined = (
+        pd.concat([big_result[["股票代號", "股票名稱"]], leek_result[["股票代號", "股票名稱"]]])
+        .drop_duplicates(subset="股票代號")
+        .reset_index(drop=True)
+    )
+
+    if combined.empty:
         st.write("目前沒有符合條件的股票可供查詢。")
     else:
         disposition_map = load_disposition_map()
-        shd_id_to_name = dict(zip(result["股票代號"], result["股票名稱"]))
+        shd_id_to_name = dict(zip(combined["股票代號"], combined["股票名稱"]))
         picked_labels, picked_label_to_id = build_disposition_stock_options(
-            result["股票代號"].tolist(), disposition_map, shd_id_to_name
+            combined["股票代號"].tolist(), disposition_map, shd_id_to_name
         )
         picked_label = st.selectbox("選擇股票代號", picked_labels, key="shd_pick_stock")
         picked = picked_label_to_id[picked_label]

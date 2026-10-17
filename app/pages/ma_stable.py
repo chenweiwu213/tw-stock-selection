@@ -313,7 +313,7 @@ def render_ma_signal_tab():
                     except ValueError as e:
                         st.warning(str(e))
                     except Exception as e:
-                        st.error(f"下載或匯入失敗：{e}(可改用本機 import_stock_price_to_supabase.py 手動匯入)")
+                        st.error(f"下載或匯入失敗：{e}")
 
     with dl_tpex_tab:
         with st.form("ma_signal_tpex_download_form"):
