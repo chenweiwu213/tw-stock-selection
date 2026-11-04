@@ -24,19 +24,25 @@ TICK_TABLE = [
     (Decimal("1000"), Decimal("1")),
 ]
 TICK_TOP = Decimal("5")
+# ETF 的跳動單位：未滿 50 元 0.01，50 元以上 0.05
+ETF_TICK_LOW = Decimal("0.01")
+ETF_TICK_HIGH = Decimal("0.05")
+ETF_TICK_BOUNDARY = Decimal("50")
 
 
-def tick_size(price: Decimal) -> Decimal:
-    """回傳該價位適用的最小跳動單位。"""
+def tick_size(price: Decimal, is_etf: bool = False) -> Decimal:
+    """回傳該價位適用的最小跳動單位(ETF 與一般股票不同)。"""
+    if is_etf:
+        return ETF_TICK_LOW if price < ETF_TICK_BOUNDARY else ETF_TICK_HIGH
     for upper, tick in TICK_TABLE:
         if price < upper:
             return tick
     return TICK_TOP
 
 
-def is_valid_tick_price(price: Decimal) -> bool:
+def is_valid_tick_price(price: Decimal, is_etf: bool = False) -> bool:
     """價格是否落在該價位的跳動單位格點上。"""
-    return price > 0 and (price % tick_size(price)) == 0
+    return price > 0 and (price % tick_size(price, is_etf)) == 0
 
 
 def tax_rate(is_day_trade: bool, is_etf: bool) -> Decimal:
@@ -70,13 +76,13 @@ def find_break_even_price(buy: Decimal, lots: int, discount: Decimal,
     for _ in range(MAX_BREAK_EVEN_STEPS):
         if calc_pnl(buy, price, lots, discount, is_day_trade, is_etf)["net"] >= 0:
             return price
-        price += tick_size(price)
+        price += tick_size(price, is_etf)
     return None
 
 
-def prev_tick_price(price: Decimal) -> Decimal:
+def prev_tick_price(price: Decimal, is_etf: bool = False) -> Decimal:
     """往下一檔合法價位(跨區間邊界時用下方區間的跳動單位，例如 10.00 的下一檔是 9.99)。"""
-    return price - tick_size(price - Decimal("0.0001"))
+    return price - tick_size(price - Decimal("0.0001"), is_etf)
 
 
 def find_max_break_even_buy_price(sell: Decimal, lots: int, discount: Decimal,
@@ -88,7 +94,7 @@ def find_max_break_even_buy_price(sell: Decimal, lots: int, discount: Decimal,
             return None
         if calc_pnl(price, sell, lots, discount, is_day_trade, is_etf)["net"] >= 0:
             return price
-        price = prev_tick_price(price)
+        price = prev_tick_price(price, is_etf)
     return None
 
 
@@ -102,20 +108,20 @@ def _to_decimal(value: float) -> Decimal:
     return Decimal(str(round(value, 2)))
 
 
-def _next_price(cur: Decimal, direction: int) -> Decimal:
+def _next_price(cur: Decimal, direction: int, is_etf: bool) -> Decimal:
     """從 cur 往上(direction > 0)或往下走一檔合法價位；不在格點上時先吸附到最近的格點。"""
-    tick = tick_size(cur) if cur > 0 else Decimal("0.01")
+    tick = tick_size(cur, is_etf) if cur > 0 else Decimal("0.01")
     on_grid = cur == 0 or cur % tick == 0
     if direction > 0:
         new = (cur // tick + 1) * tick
     elif on_grid:
-        new = prev_tick_price(cur) if cur > 0 else Decimal("0")
+        new = prev_tick_price(cur, is_etf) if cur > 0 else Decimal("0")
     else:
         new = (cur // tick) * tick
     return max(new, Decimal("0"))
 
 
-def _on_price_change(state_key: str, widget_key: str, step: Decimal):
+def _on_price_change(state_key: str, widget_key: str, step: Decimal, is_etf: bool):
     """number_input 的 on_change：偵測是否為內建 +/- 的一次點擊，是的話改走正確的一檔。
 
     內建 +/- 只有單一 step(這裡設成目前價位的跳動單位)，所以往上沒問題，
@@ -126,25 +132,25 @@ def _on_price_change(state_key: str, widget_key: str, step: Decimal):
     prev = _to_decimal(st.session_state.get(state_key, 0.0))
     new = _to_decimal(st.session_state[widget_key])
     if abs(new - prev) == step:
-        new = _next_price(prev, 1 if new > prev else -1)
+        new = _next_price(prev, 1 if new > prev else -1, is_etf)
         st.session_state[widget_key] = float(new)
     st.session_state[state_key] = float(new)
 
 
-def _price_input(container, label: str, state_key: str) -> float:
+def _price_input(container, label: str, state_key: str, is_etf: bool) -> float:
     """價格輸入框：內建 +/- 的步進依目前價位所屬區間的跳動單位動態調整。
 
-    step 改變會讓 Streamlit 把元件視為新元件，所以把 step 放進元件 key，
+    step(或 ETF 勾選)改變會讓 Streamlit 把元件視為新元件，所以把它們放進元件 key，
     並用 state_key 另存目前價格，重建時把它寫回元件狀態。
     """
     stored = float(st.session_state.get(state_key, 0.0))
-    step = tick_size(_to_decimal(stored)) if stored > 0 else Decimal("0.01")
-    widget_key = f"{state_key}_widget_{step}"
+    step = tick_size(_to_decimal(stored), is_etf) if stored > 0 else Decimal("0.01")
+    widget_key = f"{state_key}_widget_{'etf_' if is_etf else ''}{step}"
     # 每次都以 stored 為準寫回元件狀態：換 step 後的新元件、以及先前殘留的舊 key 都會因此取得正確的值
     st.session_state[widget_key] = stored
     value = container.number_input(
         label, min_value=0.0, step=float(step), format="%.2f", key=widget_key,
-        on_change=_on_price_change, args=(state_key, widget_key, step),
+        on_change=_on_price_change, args=(state_key, widget_key, step, is_etf),
     )
     st.session_state[state_key] = value
     return value
@@ -166,11 +172,19 @@ def render_pnl_calculator_tab():
                          help="做空：先賣後買。輸入賣出價後，顯示最高不賠買入價。")
     is_short = direction == "做空"
 
+    # 先決定是否為 ETF：價格輸入框的跳動單位與合法價位都依此而定
+    chk1, chk2 = st.columns(2)
+    is_day_trade = chk1.checkbox("當沖", value=False, key="pnl_day_trade")
+    is_etf = chk2.checkbox(
+        "ETF", value=False, key="pnl_etf",
+        help="ETF 的跳動單位：未滿 50 元 0.01、50 元以上 0.05。同時勾選當沖與 ETF 時，證交稅以 ETF 稅率計算。",
+    )
+
     col1, col2 = st.columns(2)
     # 做空時賣出價在前(先賣出)，做多時買入價在前(先買進)；輸入值各自存在固定的 state key
     buy_col, sell_col = (col2, col1) if is_short else (col1, col2)
-    buy_raw = _price_input(buy_col, "買入價(回補價)" if is_short else "買入價", "pnl_buy")
-    sell_raw = _price_input(sell_col, "賣出價(放空價)" if is_short else "賣出價", "pnl_sell")
+    buy_raw = _price_input(buy_col, "買入價(回補價)" if is_short else "買入價", "pnl_buy", is_etf)
+    sell_raw = _price_input(sell_col, "賣出價(放空價)" if is_short else "賣出價", "pnl_sell", is_etf)
     with col1:
         discount_raw = st.number_input(
             "手續費折扣比例 (%)", min_value=0.0, max_value=100.0, value=62.0, step=0.1,
@@ -180,24 +194,19 @@ def render_pnl_calculator_tab():
     with col2:
         lots = st.number_input("張數", min_value=1, value=1, step=1, key="pnl_lots")
 
-    chk1, chk2 = st.columns(2)
-    is_day_trade = chk1.checkbox("當沖", value=False, key="pnl_day_trade")
-    is_etf = chk2.checkbox("ETF", value=False, key="pnl_etf",
-                           help="同時勾選當沖與 ETF 時，證交稅以 ETF 稅率計算。")
-
     buy = _to_decimal(buy_raw)
     sell = _to_decimal(sell_raw)
     discount = _to_decimal(discount_raw) / 100 if discount_raw else Decimal("0")
     lots = int(lots)
 
-    buy_ok = buy > 0 and is_valid_tick_price(buy)
-    sell_ok = sell > 0 and is_valid_tick_price(sell)
+    buy_ok = buy > 0 and is_valid_tick_price(buy, is_etf)
+    sell_ok = sell > 0 and is_valid_tick_price(sell, is_etf)
 
     st.subheader("損益結果")
     if buy > 0 and not buy_ok:
-        st.error(f"買入價 {_fmt_price(buy)} 不是合法價位(此價位的跳動單位為 {tick_size(buy)})，無法計算。")
+        st.error(f"買入價 {_fmt_price(buy)} 不是合法價位(此價位的跳動單位為 {tick_size(buy, is_etf)})，無法計算。")
     if sell > 0 and not sell_ok:
-        st.error(f"賣出價 {_fmt_price(sell)} 不是合法價位(此價位的跳動單位為 {tick_size(sell)})，無法計算。")
+        st.error(f"賣出價 {_fmt_price(sell)} 不是合法價位(此價位的跳動單位為 {tick_size(sell, is_etf)})，無法計算。")
 
     if buy_ok and sell_ok:
         result = calc_pnl(buy, sell, lots, discount, is_day_trade, is_etf)
@@ -223,7 +232,7 @@ def render_pnl_calculator_tab():
     else:
         st.subheader("最低不賠賣出價")
         if not buy_ok:
-            st.info("輸入合法的買入價，系統會自動計算最低不賠賣出價。")
+            st.info("輸入合法的買入價，會自動計算最低不賠賣出價。")
             return
         break_even = find_break_even_price(buy, lots, discount, is_day_trade, is_etf)
         label = "至少要賣出"
