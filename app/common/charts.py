@@ -56,6 +56,8 @@ def plot_ma_signal_candlestick(
     ma_main_days: int = 20,
     ma_long_days: int = 60,
     disposition_periods: list | None = None,
+    liquidation_band: tuple[float, float] | None = None,
+    liquidation_lines: list[tuple[float, str]] | None = None,
 ) -> go.Figure:
     """
     個股 K 線圖：
@@ -69,6 +71,9 @@ def plot_ma_signal_candlestick(
     - disposition_periods：處置期間清單 [(start_date, end_date), ...](可為 None)。
       因為 X 軸是連續整數位置而非真實日期，色塊必須換算成對應的 x_pos 區間，
       不能直接用日期當座標(否則色塊會完全對不上圖表可視範圍)
+    - liquidation_band：融資斷頭價區間 (下限, 上限)，畫成半透明色帶(可為 None)
+    - liquidation_lines：融資斷頭價水平虛線 [(價位, 標籤), ...](可為 None)。
+      要不要畫(例如太遠就不畫)由呼叫端決定，這裡傳進來的都會畫，並把這些價位納入 Y 軸範圍
     """
     d = (
         df[df["stock_id"] == stock_id]
@@ -327,6 +332,39 @@ def plot_ma_signal_candlestick(
                     fillcolor="#ff7f0e", opacity=0.15, line_width=0,
                     row=row_i, col=1,
                 )
+
+    # ----------------------------
+    # 融資斷頭價色帶與水平線(若有)
+    # ----------------------------
+    # shapes 不會影響座標軸自動範圍，所以另外加一組透明的點，讓這些價位一定落在 Y 軸可視範圍內
+    liq_color = "#008080"
+    if liquidation_band:
+        fig.add_hrect(
+            y0=liquidation_band[0], y1=liquidation_band[1],
+            fillcolor="rgba(0,128,128,0.12)", line_width=0, layer="below",
+            row=1, col=1,
+        )
+    if liquidation_lines:
+        for level, label in liquidation_lines:
+            fig.add_hline(
+                y=level, line=dict(color=liq_color, width=1.5, dash="dash"),
+                annotation_text=label, annotation_position="top left",
+                annotation_font=dict(color=liq_color, size=11),
+                row=1, col=1,
+            )
+        fig.add_trace(
+            go.Scatter(
+                x=[0] * len(liquidation_lines),
+                y=[level for level, _ in liquidation_lines],
+                mode="markers",
+                marker=dict(opacity=0),
+                showlegend=False,
+                hoverinfo="skip",
+                name="",
+            ),
+            row=1,
+            col=1,
+        )
 
     fig.update_layout(
         title=f"{stock_id} {name}｜最近{len(d)}個交易日",

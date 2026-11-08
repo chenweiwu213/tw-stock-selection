@@ -6,7 +6,7 @@
 --
 -- 使用方式：
 --   1. 到 Supabase 專案的 SQL Editor
---   2. 貼上本檔案全部內容並執行（可重複執行，皆為 IF NOT EXISTS）
+--   2. 貼上本檔案全部內容並執行(可重複執行，皆為 IF NOT EXISTS)
 --   3. 確認 10 張表都建立成功後，才能啟動 analysis_app.py
 --
 -- 注意：app/pages/ 底下各功能模組已不再包含建表邏輯，
@@ -25,6 +25,8 @@ CREATE TABLE IF NOT EXISTS margin_trading_daily (
     stock_name VARCHAR(50),
     margin_buy INT,
     margin_sell INT,
+    margin_cash_redemption INT,
+    margin_balance INT,
     short_buy INT,
     short_sell INT,
     UNIQUE(trade_date, stock_id)
@@ -41,6 +43,7 @@ CREATE TABLE IF NOT EXISTS margin_trading_otc_daily (
     margin_buy INT,
     margin_sell INT,
     margin_cash_redemption INT,
+    margin_balance INT,
     short_buy INT,
     short_sell INT,
     short_redemption INT,
@@ -61,9 +64,6 @@ CREATE TABLE IF NOT EXISTS three_institutional_daily (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (trade_date, stock_id)
 );
--- 歷史遷移備註：舊版曾有 market 欄位，已移除。
--- 新專案從這份 schema 建表時不會產生該欄位，此語句僅為保險，可安全重複執行。
-ALTER TABLE three_institutional_daily DROP COLUMN IF EXISTS market;
 
 -- ------------------------------------------------------------
 -- 4. 站穩均線 / 均線糾結 / 均線糾結爆大量 / 下跌但法人同步買進
@@ -82,7 +82,7 @@ CREATE TABLE IF NOT EXISTS stock_price_daily (
 );
 
 -- ------------------------------------------------------------
--- 5. 處置股（共用於所有 K 線圖分頁的處置區間標示）
+-- 5. 處置股(共用於所有 K 線圖分頁的處置區間標示)
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS disposition_stocks (
     market VARCHAR(10) NOT NULL,
@@ -151,11 +151,11 @@ CREATE TABLE IF NOT EXISTS stock_mention_daily (
 );
 
 -- ------------------------------------------------------------
--- 11. Row Level Security（安全設定，可重複執行）
+-- 11. Row Level Security(安全設定，可重複執行)
 -- ------------------------------------------------------------
 -- 在 SQL Editor 建立的資料表預設「沒有啟用」RLS，代表任何拿到專案 anon key 的人，
 -- 都能透過 Supabase 自動產生的 REST API 讀寫這些表。
--- 本 App 只透過 Session Pooler 以 postgres 角色（資料表擁有者）直連資料庫，
+-- 本 App 只透過 Session Pooler 以 postgres 角色(資料表擁有者)直連資料庫，
 -- 擁有者預設會略過 RLS，所以「啟用 RLS 且不建立任何 policy」等於封鎖 REST API 存取，
 -- 同時不影響 App 與排程腳本的讀寫。
 -- 已經建好的 Supabase 專案：把這一段單獨貼到 SQL Editor 執行一次，

@@ -27,6 +27,7 @@
 **特色**：
 
 - 分析分頁涵蓋籌碼面、技術面與市場熱度。
+- 融資融券分頁可估算個股散戶融資的買進區間與斷頭價，並判斷跌破後融資是「套牢中」還是「已退場」。
 - 今日討論度與處置股清單每個交易日台灣時間約 21:00 自動更新一次：由外部排程服務(cron-job.org)呼叫 GitHub API，觸發 GitHub Actions workflow 執行。
 - 大表讀取採「版本鍵快取」，資料表最新日期沒變就不重查，壓低 Supabase 免費額度的 egress。
 - 私有部署：只有受邀者能開啟 App，程式碼本身可以公開。
@@ -37,9 +38,9 @@
 
 | 分頁 | 內容 | 主要資料表 |
 | --- | --- | --- |
-| 融資融券 | 找出融資減少、融券增加的股票 | `margin_trading_daily`、`margin_trading_otc_daily` |
-| 三大法人 | 外資、投信、自營商買賣超與同時買賣超 | `three_institutional_daily` |
 | 站穩均線 | 收盤價站穩 5 日、10 日、月線，且量能放大 | `stock_price_daily` |
+| 三大法人 | 外資、投信、自營商買賣超與同時買賣超 | `three_institutional_daily` |
+| 融資融券 | 找出融資減少、融券增加的股票；個股融資斷頭價估算與融資狀態判斷 | `margin_trading_daily`、`margin_trading_otc_daily`、`stock_price_daily` |
 | 均線糾結 | 5 日、10 日、月線互相靠攏的股票 | `stock_price_daily` |
 | 均線糾結爆大量 | 均線糾結後突破前日高低點並爆量 | `stock_price_daily` |
 | 下跌但法人同步買進 | 近期跌幅達門檻，且三大法人連續買超 | `stock_price_daily`、`three_institutional_daily` |
@@ -71,6 +72,7 @@ analysis_app.py          # 入口：page config、CSS、側邊欄選單、頁面
 schema.sql               # 所有資料表 DDL，只在 Supabase SQL Editor 手動執行一次
 update_stock_mention.py  # 排程腳本：抓取 CMoney 討論度，寫入 stock_mention_daily
 update_disposition.py    # 排程腳本：抓取上市／上櫃處置股清單，寫入 disposition_stocks
+backfill_margin.py       # 一次性腳本：補抓融資融券歷史資料(融資斷頭價估算用)
 requirements.txt         # Python 套件(Streamlit Cloud 與 GitHub Actions 都會讀取)
 packages.txt             # Streamlit Cloud 的系統套件(fonts-noto-cjk，文字雲中文字型用)
 .env.example             # 本機環境變數範本
@@ -106,6 +108,8 @@ app/
 ![資金與熱度：漲跌家數分佈與類股明細](docs/images/sector_heatmap.png)
 
 ![個股 K 線，標示處置股的處置期間](docs/images/candlestick.png)
+
+![K 線圖上的融資斷頭價區間](docs/images/margin_liquidation_chart.png)
 
 ![主動式ETF買賣：跨 ETF 訊號](docs/images/active_etf.png)
 
@@ -156,7 +160,16 @@ python update_disposition.py --dry-run            # 只印出抓到的處置股
 - 所有資料表的建表語句都在 `schema.sql`，只需在 Supabase 手動執行一次，程式碼裡沒有任何自動建表。之後若改欄位，要同步修改 `schema.sql` 並到 Supabase 執行。
 - 資料表都啟用了 Row Level Security 且沒有建立 policy，用來封鎖 Supabase 自動產生的 REST API。App 與排程腳本以資料表擁有者的身分直連，不受影響；如果所有頁面突然都沒資料，先檢查連線是否改用了非擁有者的角色。
 - 股票代號一律只收 4 碼數字，會排除權證、牛熊證、TDR 等非一般股票。
+- `margin_trading_daily` 的 `margin_cash_redemption`、`margin_balance` 與 `margin_trading_otc_daily` 的 `margin_balance` 是後來新增的欄位。已經建好的資料庫，到 Supabase SQL Editor 執行 `schema.sql` 裡對應的 `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`(可重複執行)，再用 `backfill_margin.py` 補齊舊資料；舊資料這幾欄是空值。
+- 融資斷頭價估算需要最近 60 個交易日的融資資料，用「資料庫維護」清理兩張融資表時，至少要保留 60 個交易日。
 - 「資料庫維護」分頁目前不限制權限，任何受邀者都能使用；刪除功能有「預覽影響範圍、勾選確認、才執行」兩道防呆。
+
+**融資斷頭價估算**
+
+- 結果是估算值，不是券商實際的斷頭價：未計入融資利息、券商整戶維持率與期間中途的融資還款；處置股、警示股的融資成數可能不同。
+- 回看期間內缺現金償還或股價資料的日子會被排除不計，補抓完成前結果可能不準。
+- 「融資狀態」用融資餘額的淨變化判斷：有人停損退場、同時有人新進場，淨餘額可能看不出減少；剛跌破的一兩天也還來不及反映，所以「套牢中」不代表沒有人退場。
+- 買進區間、跌破判斷都以畫面上可調整的「融資買進區間下限」為準，手動改下限，融資狀態會跟著重新判斷。
 
 **快取與資料更新**
 
