@@ -79,7 +79,7 @@ def fetch_from_twse_t86(trade_date: datetime.date) -> pd.DataFrame:
 
 # ----上櫃三大法人：從櫃買中心「三大法人買賣明細資訊」JSON API 直接下載----
 # 對應網頁：https://www.tpex.org.tw/zh-tw/mainboard/trading/major-institutional/detail/day.html
-# 下載前該頁面要手動把「請選擇類股」由「所有證券」改成
+# 下載前該頁面要手動把「選擇類股」由「所有證券」改成
 # 「全部(不含權證、牛熊證、可展延牛熊證)」，對應這裡的 sect=EW 參數。
 #
 # 注意：這支 API 回傳的 fields 陣列裡「買進股數」「賣出股數」「買賣超股數」

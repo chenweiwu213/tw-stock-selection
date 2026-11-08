@@ -13,7 +13,7 @@ from sqlalchemy import text
 
 from app.common.db import get_engine
 # 處置股手動更新功能目前已停用(見 render_db_maintenance_tab 內的註解)，
-# 若需要重新啟用，請一併取消下一行的註解
+# 若需要重新啟用，一併取消下一行的註解
 # from app.common.disposition import fetch_disposition_twse, fetch_disposition_tpex, load_disposition_map, upsert_disposition
 
 DB_MAINTENANCE_TABLES = [
@@ -31,7 +31,7 @@ DB_MAINTENANCE_TABLES = [
         "table": "margin_trading_daily",
         "date_col": "trade_date",
         "unit_label": "交易日",
-        "default_keep": 10,
+        "default_keep": 60,
     },
     {
         "key": "margin_tpex",
@@ -39,7 +39,7 @@ DB_MAINTENANCE_TABLES = [
         "table": "margin_trading_otc_daily",
         "date_col": "trade_date",
         "unit_label": "交易日",
-        "default_keep": 10,
+        "default_keep": 60,
     },
     {
         "key": "stock_price",
