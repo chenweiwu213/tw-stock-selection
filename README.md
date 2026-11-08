@@ -72,7 +72,6 @@ analysis_app.py          # 入口：page config、CSS、側邊欄選單、頁面
 schema.sql               # 所有資料表 DDL，只在 Supabase SQL Editor 手動執行一次
 update_stock_mention.py  # 排程腳本：抓取 CMoney 討論度，寫入 stock_mention_daily
 update_disposition.py    # 排程腳本：抓取上市／上櫃處置股清單，寫入 disposition_stocks
-backfill_margin.py       # 一次性腳本：補抓融資融券歷史資料(融資斷頭價估算用)
 requirements.txt         # Python 套件(Streamlit Cloud 與 GitHub Actions 都會讀取)
 packages.txt             # Streamlit Cloud 的系統套件(fonts-noto-cjk，文字雲中文字型用)
 .env.example             # 本機環境變數範本
@@ -160,7 +159,6 @@ python update_disposition.py --dry-run            # 只印出抓到的處置股
 - 所有資料表的建表語句都在 `schema.sql`，只需在 Supabase 手動執行一次，程式碼裡沒有任何自動建表。之後若改欄位，要同步修改 `schema.sql` 並到 Supabase 執行。
 - 資料表都啟用了 Row Level Security 且沒有建立 policy，用來封鎖 Supabase 自動產生的 REST API。App 與排程腳本以資料表擁有者的身分直連，不受影響；如果所有頁面突然都沒資料，先檢查連線是否改用了非擁有者的角色。
 - 股票代號一律只收 4 碼數字，會排除權證、牛熊證、TDR 等非一般股票。
-- `margin_trading_daily` 的 `margin_cash_redemption`、`margin_balance` 與 `margin_trading_otc_daily` 的 `margin_balance` 是後來新增的欄位。已經建好的資料庫，到 Supabase SQL Editor 執行 `schema.sql` 裡對應的 `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`(可重複執行)，再用 `backfill_margin.py` 補齊舊資料；舊資料這幾欄是空值。
 - 融資斷頭價估算需要最近 60 個交易日的融資資料，用「資料庫維護」清理兩張融資表時，至少要保留 60 個交易日。
 - 「資料庫維護」分頁目前不限制權限，任何受邀者都能使用；刪除功能有「預覽影響範圍、勾選確認、才執行」兩道防呆。
 
