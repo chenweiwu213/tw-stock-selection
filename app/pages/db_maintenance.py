@@ -31,7 +31,7 @@ DB_MAINTENANCE_TABLES = [
         "table": "margin_trading_daily",
         "date_col": "trade_date",
         "unit_label": "交易日",
-        "default_keep": 60,
+        "default_keep": 90,
     },
     {
         "key": "margin_tpex",
@@ -39,7 +39,7 @@ DB_MAINTENANCE_TABLES = [
         "table": "margin_trading_otc_daily",
         "date_col": "trade_date",
         "unit_label": "交易日",
-        "default_keep": 60,
+        "default_keep": 90,
     },
     {
         "key": "stock_price",
